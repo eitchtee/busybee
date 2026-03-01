@@ -16,7 +16,12 @@
             "target": "work",
             "sync_days_in_advance": 7,
             "work_hour_start": 13,
-            "work_hour_end": 17
+            "work_hour_end": 17,
+            "default_text": "Busy",
+            "accepted_statuses": [
+                "accepted",
+                "tentative"
+            ]
         }
     ]
 }

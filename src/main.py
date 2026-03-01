@@ -137,6 +137,7 @@ def main():
                 }
 
                 default_text = rule.get("default_text", "Busy")
+                accepted_statuses = rule.get("accepted_statuses")
 
                 logger.info(f"Syncing {source_name} -> {target_name}")
                 sync_events(
@@ -148,6 +149,7 @@ def main():
                     work_hour_start,
                     work_hour_end,
                     default_text,
+                    accepted_statuses,
                 )
 
             update_health(status="ok")

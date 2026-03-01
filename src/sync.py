@@ -99,6 +99,17 @@ def is_within_work_hours(event, work_hour_start, work_hour_end):
     return work_hour_start <= event_hour < work_hour_end
 
 
+def get_self_response_status(event):
+    """Get the current user's response status for an event.
+    Returns one of: 'accepted', 'declined', 'tentative', 'needsAction', or None.
+    """
+    for attendee in event.get("attendees", []):
+        if attendee.get("self"):
+            return attendee.get("responseStatus")
+    # No attendees or organizer-only event — treat as accepted
+    return None
+
+
 def process_events(
     events,
     source_account,
@@ -107,6 +118,7 @@ def process_events(
     work_hour_start=None,
     work_hour_end=None,
     default_text="Busy",
+    accepted_statuses=None,
 ):
     now = datetime.now(timezone.utc)
     max_sync_date = now + timedelta(days=sync_days_in_advance)
@@ -135,6 +147,23 @@ def process_events(
         if status != "cancelled" and event.get("start", {}).get("date"):
             logger.debug(f"Skipping all-day event '{summary}' ({event_id})")
             continue
+
+        # Check RSVP status if accepted_statuses is configured
+        if accepted_statuses is not None:
+            response = get_self_response_status(event)
+            if response is not None and response not in accepted_statuses:
+                # RSVP doesn't match — remove any existing mappings
+                for t in targets:
+                    target_event_id = get_mapped_event(event_id, t["account"])
+                    if target_event_id:
+                        delete_event_if_exists(
+                            t["service"], t["calendar_id"], target_event_id
+                        )
+                        delete_mapping(event_id, t["account"])
+                        logger.info(
+                            f"Removed mapping for '{summary}' ({event_id}) on {t['account']} (response: {response})"
+                        )
+                continue
 
         # Handle cancelled events - they have minimal fields
         if status == "cancelled":
@@ -251,6 +280,7 @@ def sync_events(
     work_hour_start=None,
     work_hour_end=None,
     default_text="Busy",
+    accepted_statuses=None,
 ):
     sync_token = get_sync_token(source_account)
 
@@ -321,6 +351,7 @@ def sync_events(
             work_hour_start,
             work_hour_end,
             default_text,
+            accepted_statuses,
         )
 
         page_token = events_result.get("nextPageToken")
