@@ -1,0 +1,8 @@
+.git
+.venv
+.gitignore
+*.md
+data/
+credentials/*.pickle
+__pycache__
+*.pyc

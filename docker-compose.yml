@@ -1,0 +1,10 @@
+services:
+  busybee:
+    build: .
+    container_name: busybee
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./credentials:/app/credentials
+      - ./data:/app/data
