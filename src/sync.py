@@ -271,17 +271,17 @@ def process_events(
                 )
 
 
-def sync_events(
+def fetch_events(
     source_account,
     source_service,
     source_calendar_id,
-    targets,
     sync_days_in_advance,
-    work_hour_start=None,
-    work_hour_end=None,
-    default_text="Busy",
-    accepted_statuses=None,
 ):
+    """Fetch events from a source calendar using sync tokens.
+
+    Returns a list of events, or None if an unrecoverable error occurred.
+    Handles sync token management (load, save, invalidation).
+    """
     sync_token = get_sync_token(source_account)
 
     try:
@@ -338,21 +338,12 @@ def sync_events(
             )
         else:
             logger.error(f"Error fetching events for {source_account}: {e}")
-            return
+            return None
 
+    all_events = []
     while True:
         events = events_result.get("items", [])
-        logger.info(f"Fetched {len(events)} events from {source_account}")
-        process_events(
-            events,
-            source_account,
-            targets,
-            sync_days_in_advance,
-            work_hour_start,
-            work_hour_end,
-            default_text,
-            accepted_statuses,
-        )
+        all_events.extend(events)
 
         page_token = events_result.get("nextPageToken")
         if not page_token:
@@ -374,3 +365,6 @@ def sync_events(
         except HttpError as e:
             logger.error(f"Error fetching paginated events for {source_account}: {e}")
             break
+
+    logger.info(f"Fetched {len(all_events)} events from {source_account}")
+    return all_events

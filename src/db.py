@@ -67,6 +67,13 @@ def set_sync_token(account_id, sync_token):
         conn.commit()
 
 
+def clear_all_sync_tokens():
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM sync_tokens")
+        conn.commit()
+
+
 def record_mapping(
     source_event_id, source_account, target_event_id, target_account, end_date
 ):
