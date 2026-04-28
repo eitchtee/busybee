@@ -21,7 +21,8 @@
             "accepted_statuses": [
                 "accepted",
                 "tentative"
-            ]
+            ],
+            "workdays": [0, 1, 2, 3, 4]
         }
     ]
 }

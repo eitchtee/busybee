@@ -99,6 +99,19 @@ def is_within_work_hours(event, work_hour_start, work_hour_end):
     return work_hour_start <= event_hour < work_hour_end
 
 
+def is_on_workday(event, workdays):
+    """Check if an event falls on a configured workday.
+    workdays is a list of integers (0=Monday, 1=Tuesday, ..., 6=Sunday).
+    If workdays is empty or None, all days pass.
+    """
+    if not workdays:
+        return True
+    start_dt = get_event_datetime(event.get("start"))
+    if not start_dt:
+        return True  # Can't determine, let it through
+    return start_dt.weekday() in workdays
+
+
 def get_self_response_status(event):
     """Get the current user's response status for an event.
     Returns one of: 'accepted', 'declined', 'tentative', 'needsAction', or None.
@@ -119,6 +132,7 @@ def process_events(
     work_hour_end=None,
     default_text="Busy",
     accepted_statuses=None,
+    workdays=None,
 ):
     now = datetime.now(timezone.utc)
     max_sync_date = now + timedelta(days=sync_days_in_advance)
@@ -225,6 +239,21 @@ def process_events(
                     delete_mapping(event_id, t["account"])
                     logger.info(
                         f"Removed mapping for '{summary}' ({event_id}) on {t['account']} (outside work hours)"
+                    )
+            continue
+
+        # Check workday filter
+        if not is_on_workday(event, workdays):
+            # Event is on a non-workday - remove any existing mappings
+            for t in targets:
+                target_event_id = get_mapped_event(event_id, t["account"])
+                if target_event_id:
+                    delete_event_if_exists(
+                        t["service"], t["calendar_id"], target_event_id
+                    )
+                    delete_mapping(event_id, t["account"])
+                    logger.info(
+                        f"Removed mapping for '{summary}' ({event_id}) on {t['account']} (non-workday)"
                     )
             continue
 

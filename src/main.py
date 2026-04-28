@@ -103,13 +103,17 @@ def main():
     sync_interval = config.get("sync_interval_seconds", 300)
 
     logger.info(f"Loaded {len(sync_rules)} sync rules:")
+    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     for i, rule in enumerate(sync_rules, 1):
         work_hours = ""
         if "work_hour_start" in rule and "work_hour_end" in rule:
             work_hours = f" (work hours: {rule['work_hour_start']}:00-{rule['work_hour_end']}:00)"
+        workdays_info = ""
+        if rule.get("workdays"):
+            workdays_info = f" (workdays: {', '.join(day_names[d] for d in rule['workdays'])})"
         logger.info(
             f"  {i}. {rule['source']} -> {rule['target']} "
-            f"(sync {rule.get('sync_days_in_advance', 30)} days){work_hours}"
+            f"(sync {rule.get('sync_days_in_advance', 30)} days){work_hours}{workdays_info}"
         )
 
     logger.info(f"Starting sync loop. Interval: {sync_interval} seconds")
@@ -186,6 +190,7 @@ def main():
                     work_hour_end = rule.get("work_hour_end")
                     default_text = rule.get("default_text", "Busy")
                     accepted_statuses = rule.get("accepted_statuses")
+                    workdays = rule.get("workdays")
 
                     target_info = services.get(target_name)
                     if not target_info:
@@ -210,6 +215,7 @@ def main():
                         work_hour_end,
                         default_text,
                         accepted_statuses,
+                        workdays,
                     )
 
             update_health(status="ok")

@@ -60,7 +60,8 @@ Edit `data/config.json` with your calendar IDs and sync rules:
             "sync_days_in_advance": 7,
             "work_hour_start": 9,
             "work_hour_end": 18,
-            "default_text": "Busy"
+            "default_text": "Busy",
+            "workdays": [0, 1, 2, 3, 4]
         }
     ]
 }
@@ -79,6 +80,7 @@ Edit `data/config.json` with your calendar IDs and sync rules:
 | `work_hour_start` | Only sync events starting at or after this hour (24h) | *(none — all hours)* |
 | `work_hour_end` | Only sync events starting before this hour (24h) | *(none — all hours)* |
 | `default_text` | Title for the created Out of Office event | `"Busy"` |
+| `workdays` | Days of the week to sync (0=Mon, 1=Tue, ..., 6=Sun). Array of integers. | *(none — all days)* |
 
 ### 4. Authenticate
 
