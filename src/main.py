@@ -118,7 +118,8 @@ def main():
 
     logger.info(f"Starting sync loop. Interval: {sync_interval} seconds")
 
-    start_health_server()
+    # Allow up to 3 consecutive failed cycles before reporting unhealthy
+    start_health_server(max_success_age=sync_interval * 3 + 60)
 
     while True:
         try:
