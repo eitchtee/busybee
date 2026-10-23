@@ -37,6 +37,8 @@ def is_busy(event):
 
 # Throttle delay between API write calls to avoid rate limiting
 API_THROTTLE_SECONDS = 0.3
+# Retries transient network errors (e.g. broken pipe on a stale keep-alive connection)
+API_NUM_RETRIES = 3
 
 
 def create_out_of_office_event(
@@ -53,7 +55,9 @@ def create_out_of_office_event(
     try:
         _time.sleep(API_THROTTLE_SECONDS)
         created_event = (
-            service.events().insert(calendarId=calendar_id, body=event_body).execute()
+            service.events()
+            .insert(calendarId=calendar_id, body=event_body)
+            .execute(num_retries=API_NUM_RETRIES)
         )
         return created_event.get("id")
     except HttpError as e:
@@ -68,7 +72,7 @@ def update_out_of_office_event(service, calendar_id, event_id, start_data, end_d
             calendarId=calendar_id,
             eventId=event_id,
             body={"start": start_data, "end": end_data},
-        ).execute()
+        ).execute(num_retries=API_NUM_RETRIES)
     except HttpError as e:
         logger.error(f"Error updating event {event_id} in {calendar_id}: {e}")
 
@@ -76,7 +80,9 @@ def update_out_of_office_event(service, calendar_id, event_id, start_data, end_d
 def delete_event_if_exists(service, calendar_id, event_id):
     try:
         _time.sleep(API_THROTTLE_SECONDS)
-        service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+        service.events().delete(calendarId=calendar_id, eventId=event_id).execute(
+            num_retries=API_NUM_RETRIES
+        )
         logger.info(f"Deleted mapped event {event_id} from {calendar_id}")
     except HttpError as e:
         if e.resp.status in (410, 404):
@@ -323,7 +329,7 @@ def fetch_events(
                     syncToken=sync_token,
                     showDeleted=True,
                 )
-                .execute()
+                .execute(num_retries=API_NUM_RETRIES)
             )
         else:
             now = datetime.now(timezone.utc).isoformat()
@@ -342,7 +348,7 @@ def fetch_events(
                     singleEvents=True,
                     showDeleted=True,
                 )
-                .execute()
+                .execute(num_retries=API_NUM_RETRIES)
             )
     except HttpError as e:
         if e.resp.status == 410:
@@ -363,7 +369,7 @@ def fetch_events(
                     singleEvents=True,
                     showDeleted=True,
                 )
-                .execute()
+                .execute(num_retries=API_NUM_RETRIES)
             )
         else:
             logger.error(f"Error fetching events for {source_account}: {e}")
@@ -389,7 +395,7 @@ def fetch_events(
                     calendarId=source_calendar_id,
                     pageToken=page_token,
                 )
-                .execute()
+                .execute(num_retries=API_NUM_RETRIES)
             )
         except HttpError as e:
             logger.error(f"Error fetching paginated events for {source_account}: {e}")
