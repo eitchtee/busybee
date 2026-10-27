@@ -121,8 +121,18 @@ def main():
     # Allow up to 3 consecutive failed cycles before reporting unhealthy
     start_health_server(max_success_age=sync_interval * 3 + 60)
 
+    last_full_sync_day = None
+
     while True:
         try:
+            # Sync tokens only report changes, so untouched events entering the
+            # sync window are never seen; a daily full sync picks them up.
+            today = datetime.now(timezone.utc).date()
+            if today != last_full_sync_day:
+                logger.info("Daily full sync: clearing sync tokens...")
+                clear_all_sync_tokens()
+                last_full_sync_day = today
+
             # Cleanup past mapped events
             logger.info("Cleaning up past mapped events from local database...")
             all_mappings = get_all_mappings()

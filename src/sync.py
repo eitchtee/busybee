@@ -319,35 +319,32 @@ def fetch_events(
     """
     sync_token = get_sync_token(source_account)
 
+    def full_sync_params():
+        now = datetime.now(timezone.utc)
+        return {
+            "timeMin": now.isoformat(),
+            "timeMax": (now + timedelta(days=sync_days_in_advance)).isoformat(),
+        }
+
+    # Google requires every call in a sync chain (pages, incremental) to repeat these
+    base_params = {"calendarId": source_calendar_id, "singleEvents": True, "showDeleted": True}
+
     try:
         if sync_token:
             logger.info(f"Using sync token for {source_account} (incremental sync)")
             events_result = (
                 source_service.events()
-                .list(
-                    calendarId=source_calendar_id,
-                    syncToken=sync_token,
-                    showDeleted=True,
-                )
+                .list(**base_params, syncToken=sync_token)
                 .execute(num_retries=API_NUM_RETRIES)
             )
         else:
-            now = datetime.now(timezone.utc).isoformat()
-            max_time = (
-                datetime.now(timezone.utc) + timedelta(days=sync_days_in_advance)
-            ).isoformat()
+            params = full_sync_params()
             logger.info(
-                f"No sync token for {source_account}, performing full sync from {now} to {max_time}"
+                f"No sync token for {source_account}, performing full sync from {params['timeMin']} to {params['timeMax']}"
             )
             events_result = (
                 source_service.events()
-                .list(
-                    calendarId=source_calendar_id,
-                    timeMin=now,
-                    timeMax=max_time,
-                    singleEvents=True,
-                    showDeleted=True,
-                )
+                .list(**base_params, **params)
                 .execute(num_retries=API_NUM_RETRIES)
             )
     except HttpError as e:
@@ -356,19 +353,9 @@ def fetch_events(
                 f"Sync token for {source_account} invalid (410 Gone). Performing full sync."
             )
             set_sync_token(source_account, None)
-            now = datetime.now(timezone.utc).isoformat()
-            max_time = (
-                datetime.now(timezone.utc) + timedelta(days=sync_days_in_advance)
-            ).isoformat()
             events_result = (
                 source_service.events()
-                .list(
-                    calendarId=source_calendar_id,
-                    timeMin=now,
-                    timeMax=max_time,
-                    singleEvents=True,
-                    showDeleted=True,
-                )
+                .list(**base_params, **full_sync_params())
                 .execute(num_retries=API_NUM_RETRIES)
             )
         else:
@@ -391,10 +378,7 @@ def fetch_events(
         try:
             events_result = (
                 source_service.events()
-                .list(
-                    calendarId=source_calendar_id,
-                    pageToken=page_token,
-                )
+                .list(**base_params, pageToken=page_token)
                 .execute(num_retries=API_NUM_RETRIES)
             )
         except HttpError as e:
