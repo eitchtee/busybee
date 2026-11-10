@@ -1,4 +1,3 @@
-import time
 import logging
 import argparse
 import sys
@@ -20,7 +19,8 @@ from sync import (
     delete_event_if_exists,
     fetch_blocked_ranges,
 )
-from health import start_health_server, update_health
+from health import start_health_server, update_health, HEALTHCHECK_PORT
+from web import reload
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -51,6 +51,14 @@ def main():
     init_db()
 
     config = load_config()
+
+    if not (args.reset_tokens or args.reset_token or args.delete):
+        # Allow up to 3 consecutive failed cycles before reporting unhealthy
+        # shortcut: health threshold uses the startup interval; interval edits reach it only after a restart
+        start_health_server(max_success_age=config.get("sync_interval_seconds", 300) * 3 + 60)
+        logger.info(f"Web UI available at http://localhost:{HEALTHCHECK_PORT}")
+        while True:
+            run_sync(load_config())  # returns when the web UI changes config or tokens
 
     # Build calendar services from config
     calendars_config = config.get("calendars", [])
@@ -103,6 +111,29 @@ def main():
         logger.info("Deletion complete. Exiting.")
         sys.exit(0)
 
+
+def run_sync(config):
+    """Run the sync loop until the web UI signals a config or token change."""
+    reload.clear()
+    calendars_config = config.get("calendars", [])
+    services = {}
+    missing = []
+    for cal in calendars_config:
+        try:
+            service = get_calendar_service(
+                cal["name"], CREDENTIALS_FILE, CREDENTIALS_DIR, interactive=False
+            )
+            services[cal["name"]] = {"service": service, "calendar_id": cal["id"]}
+        except Exception as e:
+            logger.warning(f"Calendar '{cal['name']}' unavailable: {e}")
+            missing.append(cal["name"])
+    if missing:
+        logger.warning(
+            f"Waiting for sign-in of {', '.join(missing)} at http://localhost:{HEALTHCHECK_PORT}"
+        )
+        reload.wait(60)  # retry periodically too, in case the failure was transient
+        return
+
     # Build sync rules from config
     sync_rules = config.get("sync", [])
     sync_interval = config.get("sync_interval_seconds", 300)
@@ -122,9 +153,6 @@ def main():
         )
 
     logger.info(f"Starting sync loop. Interval: {sync_interval} seconds")
-
-    # Allow up to 3 consecutive failed cycles before reporting unhealthy
-    start_health_server(max_success_age=sync_interval * 3 + 60)
 
     last_full_sync_day = None
     last_blocked = {}  # (source, rule index) -> blocked ranges seen last cycle
@@ -272,7 +300,9 @@ def main():
             update_health(status="error", error=e)
 
         logger.info(f"Sleeping for {sync_interval} seconds...")
-        time.sleep(sync_interval)
+        if reload.wait(sync_interval):
+            logger.info("Config or tokens changed, reloading...")
+            return
 
 
 if __name__ == "__main__":

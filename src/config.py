@@ -1,6 +1,5 @@
 import json
 import os
-import sys
 
 DATA_DIR = "data"
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
@@ -32,9 +31,6 @@ def load_config():
         }
         with open(CONFIG_FILE, "w") as f:
             json.dump(default_config, f, indent=4)
-        print(
-            f"Created default {CONFIG_FILE}. Please edit it with your real calendar IDs and then run again."
-        )
-        sys.exit(0)
+        print(f"Created default {CONFIG_FILE}. Edit it in the web UI or by hand.")
     with open(CONFIG_FILE, "r") as f:
         return json.load(f)

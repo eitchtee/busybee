@@ -1,8 +1,9 @@
 import threading
 import logging
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from datetime import datetime, timezone
 import json
+import web
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,7 @@ def update_health(status="ok", error=None):
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path != "/health":
-            self.send_response(404)
-            self.end_headers()
-            return
+            return web.handle(self, "GET")
 
         with _lock:
             state = _health_state.copy()
@@ -63,6 +62,9 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(state).encode())
 
+    def do_POST(self):
+        web.handle(self, "POST")
+
     def log_message(self, format, *args):
         # Suppress default request logging
         pass
@@ -72,7 +74,7 @@ def start_health_server(port=HEALTHCHECK_PORT, max_success_age=None):
     """Start the health check HTTP server in a background daemon thread."""
     global _max_success_age
     _max_success_age = max_success_age
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", port), HealthHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     logger.info(f"Health check server started on port {port}")

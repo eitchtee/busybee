@@ -39,7 +39,9 @@ Place your OAuth client secret JSON file in the `credentials/` folder. The defau
 
 ### 3. Configure
 
-Copy the example config to `data/config.json`:
+The easiest way is the web UI: run Busybee (step 5) and open <http://localhost:8080>. It edits `data/config.json`, lets you pick calendars from a list, signs each calendar in with Google, and reloads the sync loop on save. It has no login, so don't expose port 8080 to untrusted networks.
+
+To configure by hand instead, copy the example config to `data/config.json`:
 
 ```bash
 cp data/config.json.example data/config.json
@@ -86,13 +88,14 @@ Edit `data/config.json` with your calendar IDs and sync rules:
 
 ### 4. Authenticate
 
-Run the app once locally to authenticate each calendar via browser:
+Use the **Sign in with Google** links in the web UI. If Busybee runs on another machine, Google's redirect to `localhost` won't load: paste that URL into the "Signing in from another machine?" box. Tokens made before the web UI existed keep syncing, but need a fresh sign-in to list calendars.
+
+Alternatively, any CLI flag run locally opens a browser sign-in for calendars without a token:
 
 ```bash
-uv run src/main.py
+uv run src/main.py --reset-tokens
 ```
-
-A browser window will open for each calendar account. After logging in, tokens are saved as pickle files in `credentials/`.
+After signing in, tokens are saved as pickle files in `credentials/`.
 
 ### 5. Run
 
@@ -107,8 +110,6 @@ uv run src/main.py
 | `--delete` | Delete all synced events from target calendars and reset the local database |
 
 ## Docker
-
-> **Note:** You must authenticate locally first (step 4 above) before running in Docker, since OAuth requires a browser.
 
 ```bash
 docker compose up -d --build

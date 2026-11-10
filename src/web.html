@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Busybee</title>
+<style>
+  :root { --bg:#faf8f3; --card:#fff; --fg:#222; --muted:#6b6b6b; --line:#e3ded2; --accent:#d99a00; --ok:#2e7d32; --bad:#c62828; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#17150f; --card:#221f17; --fg:#eee; --muted:#a29d90; --line:#3a3528; --ok:#81c784; --bad:#ef9a9a; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:24px 16px 96px; }
+  h1 { margin:0 0 4px; } h2 { margin:28px 0 8px; font-size:17px; }
+  .muted, small { color:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin:10px 0; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+  label { display:flex; flex-direction:column; gap:3px; font-size:13px; color:var(--muted); }
+  label.inline { display:inline-flex; flex-direction:row; align-items:center; gap:4px; margin-right:10px; color:var(--fg); }
+  input, select, button { font:inherit; color:inherit; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  input[type=number] { width:90px; } input[type=checkbox] { padding:0; }
+  .grow { flex:1; min-width:180px; } .grow input, .grow select { width:100%; }
+  button { cursor:pointer; background:var(--card); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#000; font-weight:600; }
+  button.link { border:none; background:none; color:var(--bad); padding:6px 4px; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  .bar { position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--line); padding:10px 16px; }
+  .bar div { max-width:860px; margin:0 auto; display:flex; gap:12px; align-items:center; }
+  ul.errors { margin:6px 0; color:var(--bad); }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>🐝 Busybee</h1>
+  <div class="muted" id="health">Checking status…</div>
+  <div class="bad" id="secret" hidden>⚠ <code>credentials/client_secret.json</code> is missing. Add your Google OAuth client file there to sign in.</div>
+
+  <h2>General</h2>
+  <div class="card row">
+    <label>Sync interval (seconds)<input type="number" min="10" id="interval"></label>
+  </div>
+
+  <h2>Calendars</h2>
+  <p class="muted">Each calendar signs in with its own Google account. Save new calendars before signing in.</p>
+  <div id="calendars"></div>
+  <button onclick="cfg.calendars.push({name:'', id:'primary'}); render()">+ Add calendar</button>
+
+  <h2>Sync rules</h2>
+  <p class="muted">Busy time on the source creates an Out of Office event on the target.</p>
+  <div id="rules"></div>
+  <button onclick="cfg.sync.push({source:'', target:'', sync_days_in_advance:7, default_text:'Busy'}); render()">+ Add rule</button>
+
+  <h2>Signing in from another machine?</h2>
+  <div class="card">
+    <p class="muted" style="margin-top:0">After signing in, Google sends you to a <code>localhost</code> page. If Busybee runs elsewhere that page won't load: copy its full URL from the address bar and paste it here.</p>
+    <div class="row">
+      <label class="grow">Redirect URL<input id="paste" placeholder="http://localhost:8080/auth/callback?state=…&code=…"></label>
+      <button onclick="finishAuth()">Finish sign-in</button>
+    </div>
+  </div>
+</main>
+<div class="bar"><div>
+  <button class="primary" onclick="save()">Save</button>
+  <span id="msg" class="muted"></span>
+</div></div>
+
+<script>
+const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const STATUSES = ["accepted","tentative","needsAction","declined"];
+let cfg, authed = {}, savedNames = [];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const msg = (text, cls = "muted") => { $("msg").className = cls; $("msg").innerHTML = text; };
+
+async function load() {
+  const data = await (await fetch("/api/config")).json();
+  cfg = data.config; authed = data.authed;
+  cfg.calendars ??= []; cfg.sync ??= [];
+  savedNames = cfg.calendars.map(c => c.name);
+  $("secret").hidden = data.client_secret;
+  render();
+  health();
+}
+
+async function health() {
+  try {
+    const h = await (await fetch("/health")).json();
+    const when = h.last_sync ? new Date(h.last_sync).toLocaleString() : "never";
+    $("health").innerHTML = h.status === "ok" ? `<span class="ok">● Syncing</span> · last run ${when}`
+      : h.status === "starting" ? `● Waiting to start (sign in to every calendar)`
+      : `<span class="bad">● Last sync failed:</span> ${esc(h.error)}`;
+  } catch { $("health").textContent = "Status unavailable"; }
+}
+
+function render() {
+  $("interval").value = cfg.sync_interval_seconds ?? 300;
+  $("interval").oninput = e => cfg.sync_interval_seconds = +e.target.value;
+
+  $("calendars").innerHTML = cfg.calendars.map((c, i) => {
+    const saved = savedNames.includes(c.name) && c.name;
+    const status = !saved ? `<small>Save to sign in</small>`
+      : authed[c.name] ? `<span class="ok">✓ Signed in</span> <a href="/auth/start?name=${encodeURIComponent(c.name)}">re-sign in</a>`
+      : `<a href="/auth/start?name=${encodeURIComponent(c.name)}"><b>Sign in with Google</b></a>`;
+    return `<div class="card">
+      <div class="row">
+        <label>Name<input value="${esc(c.name)}" oninput="cfg.calendars[${i}].name=this.value" onchange="render()" placeholder="work"></label>
+        <label class="grow">Calendar ID<input id="calid${i}" value="${esc(c.id)}" oninput="cfg.calendars[${i}].id=this.value"></label>
+        ${saved && authed[c.name] ? `<button onclick="pick(${i})">Choose…</button>` : ""}
+        <button class="link" onclick="cfg.calendars.splice(${i},1); render()">Remove</button>
+      </div>
+      <div id="pick${i}"></div>
+      <div style="margin-top:8px">${status}</div>
+    </div>`;
+  }).join("");
+
+  const names = cfg.calendars.map(c => c.name).filter(Boolean);
+  const opts = v => `<option value=""></option>` + names.map(n => `<option ${n === v ? "selected" : ""}>${esc(n)}</option>`).join("");
+  $("rules").innerHTML = cfg.sync.map((r, i) => `<div class="card">
+    <div class="row">
+      <label>Source<select onchange="cfg.sync[${i}].source=this.value">${opts(r.source)}</select></label>
+      <span style="padding-bottom:8px">→</span>
+      <label>Target<select onchange="cfg.sync[${i}].target=this.value">${opts(r.target)}</select></label>
+      <label>Days ahead<input type="number" min="1" value="${r.sync_days_in_advance ?? 30}" oninput="setNum(${i},'sync_days_in_advance',this.value)"></label>
+      <label class="grow">Event title<input value="${esc(r.default_text ?? "Busy")}" oninput="cfg.sync[${i}].default_text=this.value"></label>
+      <button class="link" onclick="cfg.sync.splice(${i},1); render()">Remove</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label>Hours from<input type="number" min="0" max="24" placeholder="any" value="${r.work_hour_start ?? ""}" oninput="setNum(${i},'work_hour_start',this.value)"></label>
+      <label>to<input type="number" min="0" max="24" placeholder="any" value="${r.work_hour_end ?? ""}" oninput="setNum(${i},'work_hour_end',this.value)"></label>
+      <label class="grow">Pause while target has an event titled <small>(comma separated)</small>
+        <input value="${esc((r.pause_on ?? []).join(", "))}" placeholder="Vacations" oninput="setList(${i},'pause_on',this.value)"></label>
+    </div>
+    <div style="margin-top:10px"><small>Days</small> ${checks(i, "workdays", DAYS.map((d, n) => [n, d]))} <small>(none = every day)</small></div>
+    <div style="margin-top:6px"><small>Sync when my RSVP is</small> ${checks(i, "accepted_statuses", STATUSES.map(s => [s, s]))} <small>(none = any)</small></div>
+  </div>`).join("");
+}
+
+function checks(i, key, items) {
+  const cur = cfg.sync[i][key] ?? [];
+  return items.map(([v, label]) => `<label class="inline"><input type="checkbox" ${cur.includes(v) ? "checked" : ""}
+    onchange='toggle(${i}, "${key}", ${JSON.stringify(v)}, this.checked)'>${label}</label>`).join(" ");
+}
+function toggle(i, key, v, on) {
+  const order = key === "workdays" ? [0,1,2,3,4,5,6] : STATUSES;
+  const set = new Set(cfg.sync[i][key] ?? []);
+  on ? set.add(v) : set.delete(v);
+  if (set.size) cfg.sync[i][key] = order.filter(x => set.has(x)); else delete cfg.sync[i][key];
+}
+function setNum(i, key, v) { if (v === "") delete cfg.sync[i][key]; else cfg.sync[i][key] = +v; }
+function setList(i, key, v) {
+  const list = v.split(",").map(s => s.trim()).filter(Boolean);
+  if (list.length) cfg.sync[i][key] = list; else delete cfg.sync[i][key];
+}
+
+async function pick(i) {
+  const box = $("pick" + i);
+  box.innerHTML = `<small>Loading calendars…</small>`;
+  const res = await fetch("/api/calendars?name=" + encodeURIComponent(cfg.calendars[i].name));
+  const data = await res.json();
+  if (!res.ok) {
+    box.innerHTML = `<small class="bad">${esc(data.error)}${/scope|insufficient|403/i.test(data.error) ? " — sign in again to allow listing calendars." : ""}</small>`;
+    return;
+  }
+  box.innerHTML = `<label style="margin-top:8px">Pick a calendar<select onchange="cfg.calendars[${i}].id=this.value; $('calid${i}').value=this.value">
+    <option value="">—</option>${data.map(c => `<option value="${esc(c.id)}">${esc(c.summary)}${c.primary ? " (primary)" : ""} — ${esc(c.id)}</option>`).join("")}
+  </select></label>`;
+}
+
+async function post(url, body) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return [res.ok, await res.json()];
+}
+
+async function save() {
+  const [ok, data] = await post("/api/config", cfg);
+  if (!ok) return msg(data.errors ? `<ul class="errors">${data.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul>` : esc(data.error), "bad");
+  msg("Saved. Busybee reloaded with the new settings.", "ok");
+  load();
+}
+
+async function finishAuth() {
+  const [ok, data] = await post("/auth/finish", { url: $("paste").value.trim() });
+  if (!ok) return msg(esc(data.error), "bad");
+  $("paste").value = "";
+  msg(`Signed in “${esc(data.name)}”.`, "ok");
+  load();
+}
+
+load();
+setInterval(health, 15000);
+</script>
+</body>
+</html>

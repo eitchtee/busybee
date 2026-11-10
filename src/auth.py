@@ -4,11 +4,20 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+# calendarlist.readonly lets the web UI list calendars; tokens made before it was
+# added still sync, they just need re-authenticating to list calendars
+SCOPES = [
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+]
 
 
-def get_calendar_service(account_name, credentials_file, credentials_dir="credentials"):
-    token_file = os.path.join(credentials_dir, f"{account_name}.pickle")
+def token_path(account_name, credentials_dir="credentials"):
+    return os.path.join(credentials_dir, f"{account_name}.pickle")
+
+
+def get_calendar_service(account_name, credentials_file, credentials_dir="credentials", interactive=True):
+    token_file = token_path(account_name, credentials_dir)
     creds = None
 
     if os.path.exists(token_file):
@@ -18,6 +27,8 @@ def get_calendar_service(account_name, credentials_file, credentials_dir="creden
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+        elif not interactive:
+            raise RuntimeError(f"Calendar '{account_name}' is not authenticated")
         else:
             flow = InstalledAppFlow.from_client_secrets_file(credentials_file, SCOPES)
             creds = flow.run_local_server(
