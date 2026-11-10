@@ -5,144 +5,337 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Busybee</title>
 <style>
-  :root { --bg:#faf8f3; --card:#fff; --fg:#222; --muted:#6b6b6b; --line:#e3ded2; --accent:#d99a00; --ok:#2e7d32; --bad:#c62828; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#17150f; --card:#221f17; --fg:#eee; --muted:#a29d90; --line:#3a3528; --ok:#81c784; --bad:#ef9a9a; } }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; }
-  main { max-width:860px; margin:0 auto; padding:24px 16px 96px; }
-  h1 { margin:0 0 4px; } h2 { margin:28px 0 8px; font-size:17px; }
-  .muted, small { color:var(--muted); }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin:10px 0; }
-  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
-  label { display:flex; flex-direction:column; gap:3px; font-size:13px; color:var(--muted); }
-  label.inline { display:inline-flex; flex-direction:row; align-items:center; gap:4px; margin-right:10px; color:var(--fg); }
-  input, select, button { font:inherit; color:inherit; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
-  input[type=number] { width:90px; } input[type=checkbox] { padding:0; }
-  .grow { flex:1; min-width:180px; } .grow input, .grow select { width:100%; }
-  button { cursor:pointer; background:var(--card); }
-  button.primary { background:var(--accent); border-color:var(--accent); color:#000; font-weight:600; }
-  button.link { border:none; background:none; color:var(--bad); padding:6px 4px; }
-  .ok { color:var(--ok); } .bad { color:var(--bad); }
-  .bar { position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--line); padding:10px 16px; }
-  .bar div { max-width:860px; margin:0 auto; display:flex; gap:12px; align-items:center; }
-  ul.errors { margin:6px 0; color:var(--bad); }
-  a { color:var(--accent); }
+  :root {
+    --bg:#f7f5f0; --card:#fff; --field:#fbfaf7; --fg:#1f1d1a; --muted:#6f6a60; --faint:#a39d91;
+    --line:#e6e1d6; --line-strong:#d4cdbf;
+    --honey:#e8a400; --honey-soft:#fdf3d8; --honey-ink:#8a5d00;
+    --ok:#2f7d3b; --ok-soft:#e6f3e8; --bad:#b3261e; --bad-soft:#fbe9e7;
+    --shadow:0 1px 2px rgb(40 30 10 / .04), 0 2px 8px rgb(40 30 10 / .04);
+    --ease-out:cubic-bezier(0.23, 1, 0.32, 1);
+    --radius:12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#141310; --card:#1c1a16; --field:#23211c; --fg:#ece8df; --muted:#a59f92; --faint:#6e695e;
+      --line:#2f2c25; --line-strong:#3d392f;
+      --honey:#f0b429; --honey-soft:#3a2f12; --honey-ink:#f5c95a;
+      --ok:#7cc488; --ok-soft:#1f3122; --bad:#f2928a; --bad-soft:#3a1f1c;
+      --shadow:none;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing:antialiased; }
+  main { max-width:820px; margin:0 auto; padding:40px 16px 120px; }
+  code { font:12.5px ui-monospace, "Cascadia Code", Menlo, monospace; background:var(--field); border:1px solid var(--line); padding:1px 5px; border-radius:5px; }
+
+  header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:8px; }
+  h1 { margin:0; font-size:22px; letter-spacing:-0.02em; display:flex; align-items:center; gap:8px; }
+  .status { max-width:100%; display:inline-flex; align-items:center; gap:8px; padding:5px 12px; border-radius:999px; background:var(--card); border:1px solid var(--line); font-size:13px; color:var(--muted); }
+  .status b { color:var(--fg); font-weight:550; }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--faint); flex:none; }
+  .dot.ok { background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); }
+  .dot.bad { background:var(--bad); box-shadow:0 0 0 3px var(--bad-soft); }
+  .dot.wait { background:var(--honey); box-shadow:0 0 0 3px var(--honey-soft); }
+
+  .notice { margin:16px 0 0; padding:10px 14px; border-radius:10px; background:var(--bad-soft); color:var(--bad); font-size:13px; }
+
+  section { margin-top:36px; }
+  .section-head { display:flex; align-items:end; justify-content:space-between; gap:12px; margin-bottom:12px; }
+  h2 { margin:0; font-size:15px; font-weight:600; letter-spacing:-0.01em; }
+  .hint { margin:2px 0 0; color:var(--muted); font-size:13px; }
+
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px; margin-bottom:10px; }
+  .card.enter { transition:opacity 240ms var(--ease-out), transform 240ms var(--ease-out); }
+  @starting-style { .card.enter { opacity:0; transform:translateY(6px); } }
+  .card-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:14px; }
+  .card-title { font-weight:600; display:flex; align-items:center; gap:8px; min-width:0; }
+  .arrow { color:var(--faint); font-weight:400; }
+  .placeholder { color:var(--faint); font-weight:400; }
+  .empty { padding:22px; text-align:center; color:var(--muted); border:1px dashed var(--line-strong); border-radius:var(--radius); margin-bottom:10px; }
+
+  .grid { display:grid; gap:12px; grid-template-columns:repeat(3, minmax(0, 1fr)); }
+  .grid .wide { grid-column:span 2; }
+  .grid .full { grid-column:1 / -1; }
+  .range { display:flex; align-items:center; gap:8px; }
+  .range b { color:var(--faint); font-weight:400; }
+  @media (max-width:560px) {
+    .grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .grid .wide { grid-column:1 / -1; }
+  }
+  .field { display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .field > span { font-size:12px; font-weight:500; color:var(--muted); }
+  .field > span em { font-style:normal; color:var(--faint); font-weight:400; }
+  .group { margin-top:14px; display:flex; flex-direction:column; gap:7px; }
+  .group > span { font-size:12px; font-weight:500; color:var(--muted); }
+  .group > span em { font-style:normal; color:var(--faint); font-weight:400; }
+
+  input:not([type=checkbox]), select {
+    width:100%; font:inherit; color:inherit; background:var(--field); border:1px solid var(--line);
+    border-radius:8px; padding:7px 10px; height:36px; transition:border-color 150ms ease, box-shadow 150ms ease;
+  }
+  input::placeholder { color:var(--faint); }
+  input[type=number] { font-variant-numeric:tabular-nums; }
+  input:focus, select:focus { outline:none; border-color:var(--honey); box-shadow:0 0 0 3px var(--honey-soft); }
+  .with-suffix { position:relative; }
+  .with-suffix i { position:absolute; right:10px; top:50%; transform:translateY(-50%); font-style:normal; color:var(--faint); pointer-events:none; font-size:13px; }
+
+  .btn {
+    display:inline-flex; align-items:center; justify-content:center; gap:6px; height:34px; padding:0 14px;
+    font:inherit; font-weight:500; color:var(--fg); text-decoration:none; white-space:nowrap; cursor:pointer;
+    background:var(--card); border:1px solid var(--line-strong); border-radius:8px;
+    transition:transform 160ms var(--ease-out), background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  }
+  .btn:active { transform:scale(0.97); }
+  .btn:focus-visible { outline:2px solid var(--honey); outline-offset:2px; }
+  .btn.primary { background:var(--honey); border-color:var(--honey); color:#241a00; font-weight:600; }
+  .btn.ghost { border-color:transparent; background:transparent; color:var(--muted); }
+  .btn.quiet { border-color:transparent; background:transparent; color:var(--faint); height:30px; padding:0 8px; }
+  .btn.small { height:30px; padding:0 10px; font-size:13px; }
+  .btn:disabled { opacity:.45; cursor:default; transform:none; }
+  @media (hover:hover) and (pointer:fine) {
+    .btn:hover:not(:disabled) { border-color:var(--faint); }
+    .btn.primary:hover:not(:disabled) { background:#f0b11c; border-color:#f0b11c; }
+    .btn.ghost:hover { background:var(--field); color:var(--fg); }
+    .btn.quiet:hover { color:var(--bad); background:var(--bad-soft); }
+  }
+
+  .account { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+  .account-state { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); }
+  .account-actions { display:flex; gap:6px; flex-wrap:wrap; }
+  .pick { margin-top:12px; }
+  .pick-error { margin-top:10px; font-size:13px; color:var(--bad); }
+
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { position:relative; }
+  .chip input { position:absolute; opacity:0; inset:0; margin:0; cursor:pointer; }
+  .chip span {
+    display:inline-flex; align-items:center; height:30px; padding:0 12px; border-radius:999px; font-size:13px;
+    border:1px solid var(--line); background:var(--field); color:var(--muted); user-select:none;
+    transition:background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 160ms var(--ease-out);
+  }
+  .chip input:checked + span { background:var(--honey-soft); border-color:var(--honey); color:var(--honey-ink); font-weight:550; }
+  .chip input:focus-visible + span { outline:2px solid var(--honey); outline-offset:2px; }
+  .chip input:active + span { transform:scale(0.96); }
+
+  .paste { display:flex; gap:8px; }
+  .paste input { flex:1; }
+  details summary { cursor:pointer; color:var(--muted); font-size:13px; list-style:none; display:inline-flex; align-items:center; gap:6px; }
+  details summary::before { content:"›"; display:inline-block; transition:transform 160ms var(--ease-out); }
+  details[open] summary::before { transform:rotate(90deg); }
+  details summary::-webkit-details-marker { display:none; }
+  details .card { margin-top:10px; }
+
+  .bar {
+    position:fixed; left:0; right:0; bottom:0; padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+    background:color-mix(in srgb, var(--card) 88%, transparent); backdrop-filter:blur(10px);
+    border-top:1px solid var(--line); transform:translateY(110%);
+    transition:transform 240ms var(--ease-out);
+  }
+  .bar.show { transform:none; }
+  .bar-inner { max-width:820px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .bar-msg { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); min-width:0; }
+  .bar-msg.bad { color:var(--bad); align-items:start; }
+  .bar-msg ul { margin:0; padding-left:18px; }
+  .bar-actions { display:flex; gap:6px; flex:none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card.enter, .bar, .btn, .chip span { transition-property:opacity, background-color, border-color, color; }
+    @starting-style { .card.enter { transform:none; } }
+    .btn:active, .chip input:active + span { transform:none; }
+  }
 </style>
 </head>
 <body>
 <main>
-  <h1>🐝 Busybee</h1>
-  <div class="muted" id="health">Checking status…</div>
-  <div class="bad" id="secret" hidden>⚠ <code>credentials/client_secret.json</code> is missing. Add your Google OAuth client file there to sign in.</div>
+  <header>
+    <h1><span aria-hidden="true">🐝</span> Busybee</h1>
+    <div class="status" id="health" role="status"><span class="dot"></span>Checking…</div>
+  </header>
+  <div class="notice" id="secret" hidden><code>credentials/client_secret.json</code> is missing. Add your Google OAuth client file there before signing in.</div>
 
-  <h2>General</h2>
-  <div class="card row">
-    <label>Sync interval (seconds)<input type="number" min="10" id="interval"></label>
-  </div>
+  <section>
+    <div class="section-head">
+      <div><h2>General</h2></div>
+    </div>
+    <div class="card">
+      <label class="field" style="max-width:260px"><span>Check for changes every</span>
+        <div class="with-suffix"><input type="number" min="10" id="interval"><i>sec</i></div>
+      </label>
+      <p class="hint" id="interval-hint" style="margin:6px 0 0"></p>
+    </div>
+  </section>
 
-  <h2>Calendars</h2>
-  <p class="muted">Each calendar signs in with its own Google account. Save new calendars before signing in.</p>
-  <div id="calendars"></div>
-  <button onclick="cfg.calendars.push({name:'', id:'primary'}); render()">+ Add calendar</button>
+  <section>
+    <div class="section-head">
+      <div><h2>Calendars</h2><p class="hint">Each one signs in with its own Google account.</p></div>
+      <button class="btn ghost small" onclick="add('calendars', {name:'', id:'primary'})">+ Add calendar</button>
+    </div>
+    <div id="calendars"></div>
+  </section>
 
-  <h2>Sync rules</h2>
-  <p class="muted">Busy time on the source creates an Out of Office event on the target.</p>
-  <div id="rules"></div>
-  <button onclick="cfg.sync.push({source:'', target:'', sync_days_in_advance:7, default_text:'Busy'}); render()">+ Add rule</button>
+  <section>
+    <div class="section-head">
+      <div><h2>Sync rules</h2><p class="hint">Busy time on the source becomes Out of Office on the target.</p></div>
+      <button class="btn ghost small" onclick="add('sync', {source:'', target:'', sync_days_in_advance:7, default_text:'Busy'})">+ Add rule</button>
+    </div>
+    <div id="rules"></div>
+  </section>
 
-  <h2>Signing in from another machine?</h2>
-  <div class="card">
-    <p class="muted" style="margin-top:0">After signing in, Google sends you to a <code>localhost</code> page. If Busybee runs elsewhere that page won't load: copy its full URL from the address bar and paste it here.</p>
-    <div class="row">
-      <label class="grow">Redirect URL<input id="paste" placeholder="http://localhost:8080/auth/callback?state=…&code=…"></label>
-      <button onclick="finishAuth()">Finish sign-in</button>
+  <section>
+    <details>
+      <summary>Signing in from another machine?</summary>
+      <div class="card">
+        <p class="hint" style="margin:0 0 12px">After signing in, Google sends you to a <code>localhost</code> page. If Busybee runs elsewhere that page won't load. Copy its full URL from the address bar and paste it here.</p>
+        <div class="paste">
+          <input id="paste" placeholder="http://localhost:8080/auth/callback?state=…&code=…" aria-label="Redirect URL">
+          <button class="btn" onclick="finishAuth()">Finish sign-in</button>
+        </div>
+      </div>
+    </details>
+  </section>
+</main>
+
+<div class="bar" id="bar">
+  <div class="bar-inner">
+    <div class="bar-msg" id="msg"></div>
+    <div class="bar-actions" id="bar-actions">
+      <button class="btn ghost" onclick="discard()">Discard</button>
+      <button class="btn primary" id="save" onclick="save()">Save changes</button>
     </div>
   </div>
-</main>
-<div class="bar"><div>
-  <button class="primary" onclick="save()">Save</button>
-  <span id="msg" class="muted"></span>
-</div></div>
+</div>
 
 <script>
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-const STATUSES = ["accepted","tentative","needsAction","declined"];
-let cfg, authed = {}, savedNames = [];
+const STATUSES = [["accepted","Accepted"],["tentative","Maybe"],["needsAction","No reply"],["declined","Declined"]];
+let cfg, saved = "", authed = {}, savedNames = [], justAdded = null, flashTimer;
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
-const msg = (text, cls = "muted") => { $("msg").className = cls; $("msg").innerHTML = text; };
+const dirty = () => cfg && JSON.stringify(cfg) !== saved;
+
+function syncBar() {
+  const d = dirty();
+  if (d && !$("msg").classList.contains("bad")) {
+    $("msg").innerHTML = `<span class="dot wait"></span>Unsaved changes`;
+  }
+  $("bar-actions").hidden = !d;
+  $("bar").classList.toggle("show", d || $("msg").dataset.sticky === "1");
+}
+// Every edit goes through an input/change/click handler, so recheck after each
+["input", "change", "click"].forEach(ev => document.addEventListener(ev, () => setTimeout(syncBar)));
+addEventListener("beforeunload", e => { if (dirty()) e.preventDefault(); });
+
+function flash(html, cls = "") {
+  clearTimeout(flashTimer);
+  $("msg").className = "bar-msg " + cls;
+  $("msg").innerHTML = html;
+  $("msg").dataset.sticky = "1";
+  syncBar();
+  if (cls !== "bad") flashTimer = setTimeout(() => { $("msg").dataset.sticky = ""; $("msg").className = "bar-msg"; syncBar(); }, 2400);
+}
 
 async function load() {
   const data = await (await fetch("/api/config")).json();
   cfg = data.config; authed = data.authed;
   cfg.calendars ??= []; cfg.sync ??= [];
+  saved = JSON.stringify(cfg);
   savedNames = cfg.calendars.map(c => c.name);
   $("secret").hidden = data.client_secret;
-  render();
-  health();
+  render(); health(); syncBar();
 }
 
 async function health() {
   try {
     const h = await (await fetch("/health")).json();
-    const when = h.last_sync ? new Date(h.last_sync).toLocaleString() : "never";
-    $("health").innerHTML = h.status === "ok" ? `<span class="ok">● Syncing</span> · last run ${when}`
-      : h.status === "starting" ? `● Waiting to start (sign in to every calendar)`
-      : `<span class="bad">● Last sync failed:</span> ${esc(h.error)}`;
-  } catch { $("health").textContent = "Status unavailable"; }
+    const ago = h.last_sync ? timeAgo(new Date(h.last_sync)) : "";
+    $("health").innerHTML = h.status === "ok" ? `<span class="dot ok"></span><b>Syncing</b> · ${ago}`
+      : h.status === "starting" ? `<span class="dot wait"></span><b>Waiting</b> · sign in to every calendar`
+      : `<span class="dot bad"></span><b>Last sync failed</b>`;
+    $("health").title = h.error || "";
+  } catch { $("health").innerHTML = `<span class="dot"></span>Status unavailable`; }
 }
+function timeAgo(d) {
+  const s = Math.round((Date.now() - d) / 1000);
+  return s < 60 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : d.toLocaleString();
+}
+
+function add(list, item) {
+  cfg[list].push(item);
+  justAdded = list + (cfg[list].length - 1);
+  render();
+  const inputs = document.querySelectorAll(`#${list === "sync" ? "rules" : "calendars"} .card:last-child input, #${list === "sync" ? "rules" : "calendars"} .card:last-child select`);
+  inputs[0]?.focus();
+}
+function remove(list, i) { cfg[list].splice(i, 1); render(); }
+function discard() { cfg = JSON.parse(saved); $("msg").className = "bar-msg"; $("msg").dataset.sticky = ""; render(); syncBar(); }
 
 function render() {
   $("interval").value = cfg.sync_interval_seconds ?? 300;
-  $("interval").oninput = e => cfg.sync_interval_seconds = +e.target.value;
+  $("interval").oninput = e => { cfg.sync_interval_seconds = +e.target.value; intervalHint(); };
+  intervalHint();
 
-  $("calendars").innerHTML = cfg.calendars.map((c, i) => {
-    const saved = savedNames.includes(c.name) && c.name;
-    const status = !saved ? `<small>Save to sign in</small>`
-      : authed[c.name] ? `<span class="ok">✓ Signed in</span> <a href="/auth/start?name=${encodeURIComponent(c.name)}">re-sign in</a>`
-      : `<a href="/auth/start?name=${encodeURIComponent(c.name)}"><b>Sign in with Google</b></a>`;
-    return `<div class="card">
-      <div class="row">
-        <label>Name<input value="${esc(c.name)}" oninput="cfg.calendars[${i}].name=this.value" onchange="render()" placeholder="work"></label>
-        <label class="grow">Calendar ID<input id="calid${i}" value="${esc(c.id)}" oninput="cfg.calendars[${i}].id=this.value"></label>
-        ${saved && authed[c.name] ? `<button onclick="pick(${i})">Choose…</button>` : ""}
-        <button class="link" onclick="cfg.calendars.splice(${i},1); render()">Remove</button>
+  $("calendars").innerHTML = cfg.calendars.length ? cfg.calendars.map((c, i) => {
+    const isSaved = c.name && savedNames.includes(c.name);
+    const signIn = `/auth/start?name=${encodeURIComponent(c.name)}`;
+    const state = !isSaved ? `<span class="dot"></span>Save to sign in`
+      : authed[c.name] ? `<span class="dot ok"></span>Signed in`
+      : `<span class="dot wait"></span>Not signed in`;
+    const actions = !isSaved ? ""
+      : authed[c.name] ? `<button class="btn small" onclick="pick(${i})">Choose calendar…</button><a class="btn small ghost" href="${signIn}">Sign in again</a>`
+      : `<a class="btn small primary" href="${signIn}">Sign in with Google</a>`;
+    return `<div class="card${justAdded === "calendars" + i ? " enter" : ""}">
+      <div class="grid">
+        <label class="field"><span>Name</span><input value="${esc(c.name)}" placeholder="work" oninput="cfg.calendars[${i}].name=this.value" onchange="render()"></label>
+        <label class="field wide"><span>Calendar ID <em>· "primary" is the account's main calendar</em></span><input id="calid${i}" value="${esc(c.id)}" oninput="cfg.calendars[${i}].id=this.value"></label>
       </div>
-      <div id="pick${i}"></div>
-      <div style="margin-top:8px">${status}</div>
+      <div class="pick" id="pick${i}" hidden></div>
+      <div class="account">
+        <span class="account-state">${state}</span>
+        <div class="account-actions">${actions}<button class="btn quiet" onclick="remove('calendars', ${i})" aria-label="Remove calendar">Remove</button></div>
+      </div>
     </div>`;
-  }).join("");
+  }).join("") : `<div class="empty">No calendars yet.</div>`;
 
   const names = cfg.calendars.map(c => c.name).filter(Boolean);
-  const opts = v => `<option value=""></option>` + names.map(n => `<option ${n === v ? "selected" : ""}>${esc(n)}</option>`).join("");
-  $("rules").innerHTML = cfg.sync.map((r, i) => `<div class="card">
-    <div class="row">
-      <label>Source<select onchange="cfg.sync[${i}].source=this.value">${opts(r.source)}</select></label>
-      <span style="padding-bottom:8px">→</span>
-      <label>Target<select onchange="cfg.sync[${i}].target=this.value">${opts(r.target)}</select></label>
-      <label>Days ahead<input type="number" min="1" value="${r.sync_days_in_advance ?? 30}" oninput="setNum(${i},'sync_days_in_advance',this.value)"></label>
-      <label class="grow">Event title<input value="${esc(r.default_text ?? "Busy")}" oninput="cfg.sync[${i}].default_text=this.value"></label>
-      <button class="link" onclick="cfg.sync.splice(${i},1); render()">Remove</button>
+  const opts = v => `<option value="">Choose…</option>` + names.map(n => `<option ${n === v ? "selected" : ""}>${esc(n)}</option>`).join("");
+  $("rules").innerHTML = cfg.sync.length ? cfg.sync.map((r, i) => `<div class="card${justAdded === "sync" + i ? " enter" : ""}">
+    <div class="card-head">
+      <div class="card-title">${r.source ? esc(r.source) : `<span class="placeholder">source</span>`}<span class="arrow">→</span>${r.target ? esc(r.target) : `<span class="placeholder">target</span>`}</div>
+      <button class="btn quiet" onclick="remove('sync', ${i})" aria-label="Remove rule">Remove</button>
     </div>
-    <div class="row" style="margin-top:10px">
-      <label>Hours from<input type="number" min="0" max="24" placeholder="any" value="${r.work_hour_start ?? ""}" oninput="setNum(${i},'work_hour_start',this.value)"></label>
-      <label>to<input type="number" min="0" max="24" placeholder="any" value="${r.work_hour_end ?? ""}" oninput="setNum(${i},'work_hour_end',this.value)"></label>
-      <label class="grow">Pause while target has an event titled <small>(comma separated)</small>
-        <input value="${esc((r.pause_on ?? []).join(", "))}" placeholder="Vacations" oninput="setList(${i},'pause_on',this.value)"></label>
+    <div class="grid">
+      <label class="field"><span>From</span><select onchange="cfg.sync[${i}].source=this.value; render()">${opts(r.source)}</select></label>
+      <label class="field"><span>To</span><select onchange="cfg.sync[${i}].target=this.value; render()">${opts(r.target)}</select></label>
+      <label class="field"><span>Look ahead</span><div class="with-suffix"><input type="number" min="1" value="${r.sync_days_in_advance ?? 30}" oninput="setNum(${i},'sync_days_in_advance',this.value)"><i>days</i></div></label>
+      <label class="field"><span>Event title</span><input value="${esc(r.default_text ?? "Busy")}" oninput="cfg.sync[${i}].default_text=this.value"></label>
+      <div class="field wide"><span>Only between <em>· 24h, leave empty for any time</em></span>
+        <div class="range">
+          <input type="number" min="0" max="24" placeholder="From" aria-label="From hour" value="${r.work_hour_start ?? ""}" oninput="setNum(${i},'work_hour_start',this.value)">
+          <b>–</b>
+          <input type="number" min="0" max="24" placeholder="To" aria-label="To hour" value="${r.work_hour_end ?? ""}" oninput="setNum(${i},'work_hour_end',this.value)">
+        </div></div>
+      <label class="field full"><span>Pause while target has <em>· event titles, comma separated</em></span>
+        <input value="${esc((r.pause_on ?? []).join(", "))}" placeholder="Vacations, Out sick" oninput="setList(${i},'pause_on',this.value)"></label>
     </div>
-    <div style="margin-top:10px"><small>Days</small> ${checks(i, "workdays", DAYS.map((d, n) => [n, d]))} <small>(none = every day)</small></div>
-    <div style="margin-top:6px"><small>Sync when my RSVP is</small> ${checks(i, "accepted_statuses", STATUSES.map(s => [s, s]))} <small>(none = any)</small></div>
-  </div>`).join("");
+    <div class="group"><span>Days <em>· none selected means every day</em></span>${chips(i, "workdays", DAYS.map((d, n) => [n, d]))}</div>
+    <div class="group"><span>Only when my reply is <em>· none selected means any</em></span>${chips(i, "accepted_statuses", STATUSES)}</div>
+  </div>`).join("") : `<div class="empty">No sync rules yet.</div>`;
+  justAdded = null;
 }
 
-function checks(i, key, items) {
+function intervalHint() {
+  const s = cfg.sync_interval_seconds ?? 300;
+  $("interval-hint").textContent = s >= 60 ? `That's about every ${+(s / 60).toFixed(1)} min.` : "";
+}
+
+function chips(i, key, items) {
   const cur = cfg.sync[i][key] ?? [];
-  return items.map(([v, label]) => `<label class="inline"><input type="checkbox" ${cur.includes(v) ? "checked" : ""}
-    onchange='toggle(${i}, "${key}", ${JSON.stringify(v)}, this.checked)'>${label}</label>`).join(" ");
+  return `<div class="chips">` + items.map(([v, label]) => `<label class="chip"><input type="checkbox" ${cur.includes(v) ? "checked" : ""}
+    onchange='toggle(${i}, "${key}", ${JSON.stringify(v)}, this.checked)'><span>${label}</span></label>`).join("") + `</div>`;
 }
 function toggle(i, key, v, on) {
-  const order = key === "workdays" ? [0,1,2,3,4,5,6] : STATUSES;
+  const order = key === "workdays" ? [0,1,2,3,4,5,6] : STATUSES.map(s => s[0]);
   const set = new Set(cfg.sync[i][key] ?? []);
   on ? set.add(v) : set.delete(v);
   if (set.size) cfg.sync[i][key] = order.filter(x => set.has(x)); else delete cfg.sync[i][key];
@@ -155,15 +348,16 @@ function setList(i, key, v) {
 
 async function pick(i) {
   const box = $("pick" + i);
-  box.innerHTML = `<small>Loading calendars…</small>`;
+  box.hidden = false;
+  box.innerHTML = `<span class="hint">Loading calendars…</span>`;
   const res = await fetch("/api/calendars?name=" + encodeURIComponent(cfg.calendars[i].name));
   const data = await res.json();
   if (!res.ok) {
-    box.innerHTML = `<small class="bad">${esc(data.error)}${/scope|insufficient|403/i.test(data.error) ? " — sign in again to allow listing calendars." : ""}</small>`;
+    box.innerHTML = `<div class="pick-error">${esc(data.error)}${/scope|insufficient|403/i.test(data.error) ? " Sign in again to allow listing calendars." : ""}</div>`;
     return;
   }
-  box.innerHTML = `<label style="margin-top:8px">Pick a calendar<select onchange="cfg.calendars[${i}].id=this.value; $('calid${i}').value=this.value">
-    <option value="">—</option>${data.map(c => `<option value="${esc(c.id)}">${esc(c.summary)}${c.primary ? " (primary)" : ""} — ${esc(c.id)}</option>`).join("")}
+  box.innerHTML = `<label class="field"><span>Available calendars</span><select onchange="cfg.calendars[${i}].id=this.value; $('calid${i}').value=this.value">
+    <option value="">Choose…</option>${data.map(c => `<option value="${esc(c.id)}" ${c.id === cfg.calendars[i].id ? "selected" : ""}>${esc(c.summary)}${c.primary ? " (primary)" : ""}</option>`).join("")}
   </select></label>`;
 }
 
@@ -173,18 +367,21 @@ async function post(url, body) {
 }
 
 async function save() {
-  const [ok, data] = await post("/api/config", cfg);
-  if (!ok) return msg(data.errors ? `<ul class="errors">${data.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul>` : esc(data.error), "bad");
-  msg("Saved. Busybee reloaded with the new settings.", "ok");
-  load();
+  $("save").disabled = true; $("save").textContent = "Saving…";
+  try {
+    const [ok, data] = await post("/api/config", cfg);
+    if (!ok) return flash(data.errors ? `<ul>${data.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul>` : esc(data.error), "bad");
+    await load();
+    flash(`<span class="dot ok"></span>Saved. Busybee reloaded with the new settings.`);
+  } finally { $("save").disabled = false; $("save").textContent = "Save changes"; }
 }
 
 async function finishAuth() {
   const [ok, data] = await post("/auth/finish", { url: $("paste").value.trim() });
-  if (!ok) return msg(esc(data.error), "bad");
+  if (!ok) return flash(esc(data.error), "bad");
   $("paste").value = "";
-  msg(`Signed in “${esc(data.name)}”.`, "ok");
-  load();
+  await load();
+  flash(`<span class="dot ok"></span>Signed in “${esc(data.name)}”.`);
 }
 
 load();
