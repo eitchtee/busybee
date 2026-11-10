@@ -14,6 +14,7 @@ A Python application that syncs Google Calendar events across multiple accounts.
 
 - **Dynamic configuration** — define any number of calendars and sync rules
 - **Work hour filtering** — only sync events that fall within specified hours
+- **Pause events** — an event like "Vacations" on the target calendar pauses syncing to it for its duration
 - **Incremental sync** — uses Google's `syncToken` for efficient polling
 - **Duplicate prevention** — tags created events with `extendedProperties` and tracks mappings in a local SQLite database
 - **Auto-cleanup** — removes stale database entries for past events
@@ -81,6 +82,7 @@ Edit `data/config.json` with your calendar IDs and sync rules:
 | `work_hour_end` | Only sync events starting before this hour (24h) | *(none — all hours)* |
 | `default_text` | Title for the created Out of Office event | `"Busy"` |
 | `workdays` | Days of the week to sync (0=Mon, 1=Tue, ..., 6=Sun). Array of integers. | *(none — all days)* |
+| `pause_on` | Event titles on the **target** calendar that pause syncing while they last (e.g. `["Vacations"]`). Case-insensitive exact match; source events overlapping one are not synced, and existing copies are removed. | *(none)* |
 
 ### 4. Authenticate
 

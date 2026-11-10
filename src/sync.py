@@ -118,6 +118,67 @@ def is_on_workday(event, workdays):
     return start_dt.weekday() in workdays
 
 
+def fetch_blocked_ranges(service, calendar_id, titles, sync_days_in_advance):
+    """Return (start, end) ranges of events on the target calendar whose title
+    matches one of `titles` (case-insensitive, exact). All-day ranges are naive
+    local dates; timed ranges are timezone-aware. Returns None on API error.
+    """
+    now = datetime.now(timezone.utc)
+    wanted = {t.casefold() for t in titles}
+    ranges = []
+    for title in titles:
+        try:
+            result = (
+                service.events()
+                .list(
+                    calendarId=calendar_id,
+                    q=title,
+                    singleEvents=True,
+                    orderBy="startTime",
+                    timeMin=now.isoformat(),
+                    timeMax=(now + timedelta(days=sync_days_in_advance)).isoformat(),
+                )
+                .execute(num_retries=API_NUM_RETRIES)
+            )
+        except HttpError as e:
+            logger.error(f"Error fetching blocker events from {calendar_id}: {e}")
+            return None
+        # shortcut: reads only the first page (250 events), plenty for a title search
+        for ev in result.get("items", []):
+            if ev.get("summary", "").strip().casefold() not in wanted:
+                continue
+            if ev.get("extendedProperties", {}).get("private", {}).get("busybeeSync") == "true":
+                continue
+            start, end = ev.get("start", {}), ev.get("end", {})
+            if "date" in start:
+                ranges.append(
+                    (datetime.fromisoformat(start["date"]), datetime.fromisoformat(end["date"]))
+                )
+            elif "dateTime" in start:
+                ranges.append(
+                    (datetime.fromisoformat(start["dateTime"]), datetime.fromisoformat(end["dateTime"]))
+                )
+    return ranges
+
+
+def is_blocked(event, blocked_ranges):
+    """True if the event overlaps any blocked range."""
+    if not blocked_ranges:
+        return False
+    start_dt = get_event_datetime(event.get("start"))
+    end_dt = get_event_datetime(event.get("end"))
+    if not start_dt or not end_dt:
+        return False
+    for r_start, r_end in blocked_ranges:
+        s, e = start_dt, end_dt
+        if r_start.tzinfo is None:
+            # All-day blocker: compare in the event's own local time
+            s, e = s.replace(tzinfo=None), e.replace(tzinfo=None)
+        if s < r_end and e > r_start:
+            return True
+    return False
+
+
 def get_self_response_status(event):
     """Get the current user's response status for an event.
     Returns one of: 'accepted', 'declined', 'tentative', 'needsAction', or None.
@@ -139,6 +200,7 @@ def process_events(
     default_text="Busy",
     accepted_statuses=None,
     workdays=None,
+    blocked_ranges=None,
 ):
     now = datetime.now(timezone.utc)
     max_sync_date = now + timedelta(days=sync_days_in_advance)
@@ -260,6 +322,20 @@ def process_events(
                     delete_mapping(event_id, t["account"])
                     logger.info(
                         f"Removed mapping for '{summary}' ({event_id}) on {t['account']} (non-workday)"
+                    )
+            continue
+
+        # Check pause_on filter (a blocker event on the target covers this one)
+        if is_blocked(event, blocked_ranges):
+            for t in targets:
+                target_event_id = get_mapped_event(event_id, t["account"])
+                if target_event_id:
+                    delete_event_if_exists(
+                        t["service"], t["calendar_id"], target_event_id
+                    )
+                    delete_mapping(event_id, t["account"])
+                    logger.info(
+                        f"Removed mapping for '{summary}' ({event_id}) on {t['account']} (paused)"
                     )
             continue
 

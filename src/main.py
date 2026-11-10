@@ -14,7 +14,12 @@ from db import (
     delete_mapping,
 )
 from auth import get_calendar_service
-from sync import fetch_events, process_events, delete_event_if_exists
+from sync import (
+    fetch_events,
+    process_events,
+    delete_event_if_exists,
+    fetch_blocked_ranges,
+)
 from health import start_health_server, update_health
 
 logging.basicConfig(
@@ -122,6 +127,7 @@ def main():
     start_health_server(max_success_age=sync_interval * 3 + 60)
 
     last_full_sync_day = None
+    last_blocked = {}  # (source, rule index) -> blocked ranges seen last cycle
 
     while True:
         try:
@@ -178,6 +184,29 @@ def main():
                     r.get("sync_days_in_advance", 30) for r in rules
                 )
 
+                # Blocker events live on the target, so source sync tokens miss
+                # their changes; force a full source sync when they change.
+                blocked = []
+                for idx, r in enumerate(rules):
+                    ranges = None
+                    if r.get("pause_on") and r["target"] in services:
+                        t_info = services[r["target"]]
+                        ranges = fetch_blocked_ranges(
+                            t_info["service"],
+                            t_info["calendar_id"],
+                            r["pause_on"],
+                            r.get("sync_days_in_advance", 30),
+                        )
+                        key = (source_name, idx)
+                        if ranges is not None and last_blocked.get(key) != ranges:
+                            if key in last_blocked:
+                                logger.info(
+                                    f"Pause events changed on {r['target']}, forcing full sync of {source_name}"
+                                )
+                                set_sync_token(source_name, None)
+                            last_blocked[key] = ranges
+                    blocked.append(ranges)
+
                 # Fetch events once for this source
                 target_names = [r["target"] for r in rules]
                 logger.info(
@@ -194,7 +223,13 @@ def main():
                     continue  # Error already logged in fetch_events
 
                 # Process the fetched events for each target rule
-                for rule in rules:
+                for rule, blocked_ranges in zip(rules, blocked):
+                    if rule.get("pause_on") and blocked_ranges is None:
+                        # Can't tell if paused; skip rather than sync into a vacation
+                        logger.warning(
+                            f"Skipping {source_name} -> {rule['target']} this cycle (pause_on lookup failed)"
+                        )
+                        continue
                     target_name = rule["target"]
                     sync_days = rule.get("sync_days_in_advance", 30)
                     work_hour_start = rule.get("work_hour_start")
@@ -227,6 +262,7 @@ def main():
                         default_text,
                         accepted_statuses,
                         workdays,
+                        blocked_ranges,
                     )
 
             update_health(status="ok")
